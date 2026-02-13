@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
 from app.models import (
-    Prompt, PromptCreate, PromptUpdate,
+    Prompt, PromptCreate, PromptUpdate, PromptPatch,
     Collection, CollectionCreate,
     PromptList, CollectionList, HealthResponse,
     get_current_time
@@ -13,6 +13,7 @@ from app.models import (
 from app.storage import storage
 from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
 from app import __version__
+from app.seed_data import seed_initial_data
 
 
 app = FastAPI(
@@ -20,6 +21,11 @@ app = FastAPI(
     description="AI Prompt Engineering Platform",
     version=__version__
 )
+# uncomment below code to seed the data initially
+# @app.on_event("startup")
+# def startup_event():
+#     if not storage.get_all_collections():
+#         seed_initial_data()
 
 # CORS middleware
 app.add_middleware(
@@ -110,6 +116,18 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
 
 # NOTE: PATCH endpoint is missing! Students need to implement this.
 # It should allow partial updates (only update provided fields)
+@app.patch("/prompts/{prompt_id}", response_model=Prompt)
+def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
+    existing = storage.get_prompt(prompt_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    update_data = prompt_data.model_dump(exclude_unset=True)
+
+    updated_prompt = existing.model_copy(update=update_data)
+    updated_prompt.updated_at = get_current_time()
+
+    return storage.update_prompt(prompt_id, updated_prompt)
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
