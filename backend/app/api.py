@@ -122,6 +122,9 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch):
 
     update_data = prompt_data.model_dump(exclude_unset=True)
 
+    if not update_data:
+        raise HTTPException(status_code=400, detail="At least one field must be provided to update")
+
     updated_prompt = existing.model_copy(update=update_data)
     updated_prompt.updated_at = get_current_time()
 
