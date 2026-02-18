@@ -15,13 +15,13 @@
 
 ---
 
-## Authentication {#authentication}
+## Authentication 
 
 **None required** (public API)
 
 ---
 
-## Error Formats {#error-formats}
+## Error Formats 
 
 ```json
 {
@@ -37,7 +37,7 @@
 
 ---
 
-## Health Check {#health-check}
+## Health Check 
 
 ### `GET /health`
 
@@ -51,7 +51,7 @@
 
 ---
 
-## Prompt Endpoints {#prompt-endpoints}
+## Prompt Endpoints 
 
 ### `GET /prompts`
 List prompts **(sorted newest first by `updated_at`)**
@@ -140,7 +140,7 @@ List prompts **(sorted newest first by `updated_at`)**
 
 ---
 
-## Collection Endpoints {#collection-endpoints}
+## Collection Endpoints 
 
 ### `GET /collections`
 
@@ -190,7 +190,7 @@ List prompts **(sorted newest first by `updated_at`)**
 
 ---
 
-## Validation Rules {#validation-rules}
+## Validation Rules 
 
 | Field | Constraints |
 |-------|-------------|
@@ -203,7 +203,7 @@ List prompts **(sorted newest first by `updated_at`)**
 
 ---
 
-## OpenAPI Docs {#openapi-docs}
+## OpenAPI Docs 
 
 - **Swagger UI**: `/docs`
 - **ReDoc**: `/redoc`
@@ -219,4 +219,3 @@ List prompts **(sorted newest first by `updated_at`)**
 - ✅ **Collection validation** on prompt create/update
 
 ---
-
