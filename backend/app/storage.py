@@ -164,6 +164,13 @@ class Storage:
             return True
         return False
     
+    def get_all_tags(self) -> List[str]:
+        """Retrieve a list of all unique tags."""
+        tags_set = set()
+        for prompt in self._prompts.values():
+            tags_set.update(prompt.tags)
+        return list(tags_set)
+    
     def get_prompts_by_collection(self, collection_id: str) -> List[Prompt]:
         """Retrieve prompts belonging to a specific collection.
 
@@ -178,6 +185,19 @@ class Storage:
             >>> print(len(prompts))
         """
         return [p for p in self._prompts.values() if p.collection_id == collection_id]
+    
+    def filter_prompts_by_tags(self, prompts: List[Prompt], tags: List[str]) -> List[Prompt]:
+        if not tags:
+            return prompts
+
+        # Normalize search tags to lowercase
+        search_tags = [t.lower() for t in tags]
+
+        # AND logic: Prompt must have ALL requested tags
+        return [
+            p for p in prompts 
+            if all(tag in p.tags for tag in search_tags)
+        ]
     
     # ============== Utility ==============
     

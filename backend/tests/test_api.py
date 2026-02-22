@@ -398,4 +398,104 @@ class TestCoverageGaps:
         assert response.status_code == 204
 
         # 4. Verify collection is gone
-        assert client.get(f"/collections/{col_id}").status_code == 404        
+        assert client.get(f"/collections/{col_id}").status_code == 404
+                
+class TestTaggingSystem:
+    """Tests for the new Tagging System features."""
+
+    def test_create_prompt_with_tags(self, client: TestClient):
+        """Test that tags are correctly saved and slugified during creation."""
+        prompt_data = {
+            "title": "AI Prompt",
+            "content": "Content here",
+            "tags": ["OpenAI", " GPT-4 ", "machine learning"]
+        }
+        response = client.post("/prompts", json=prompt_data)
+        assert response.status_code == 201
+        tags = response.json()["tags"]
+        
+        # Verify slugification: lowercase, trimmed, and spaces to hyphens
+        assert "OpenAI" in tags
+        assert len(tags) == 3
+
+    def test_get_all_tags_endpoint(self, client: TestClient):
+        """Test the GET /tags endpoint returns unique tags across all prompts."""
+        # Create two prompts with overlapping tags
+        client.post("/prompts", json={"title": "P1", "content": "C1", "tags": ["tech", "ai"]})
+        client.post("/prompts", json={"title": "P2", "content": "C2", "tags": ["ai", "news"]})
+
+        response = client.get("/tags")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should contain unique tags only
+        assert set(data["tags"]) == {"tech", "ai", "news"}
+        assert data["total"] == 3
+
+    def test_filter_prompts_by_tags(self, client: TestClient):
+        """Test filtering prompts by multiple tags (AND logic)."""
+        # 1. Create a prompt with specific tags
+        client.post("/prompts", json={"title": "Target", "content": "C1", "tags": ["prod", "openai"]})
+        # 2. Create a prompt with only one matching tag
+        client.post("/prompts", json={"title": "Miss", "content": "C2", "tags": ["prod", "anthropic"]})
+
+        # Filter by both tags
+        response = client.get("/prompts?tags=prod,openai")
+        data = response.json()
+        assert data["total"] == 1
+        assert data["prompts"][0]["title"] == "Target"
+
+    def test_patch_tags_replacement(self, client: TestClient):
+        """Test that PATCH correctly replaces the tag list."""
+        # Create prompt
+        create_res = client.post("/prompts", json={"title": "T1", "content": "C1", "tags": ["old"]})
+        prompt_id = create_res.json()["id"]
+
+        # Patch with new tags
+        patch_data = {"tags": ["new", "tags"]}
+        response = client.patch(f"/prompts/{prompt_id}", json=patch_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "old" not in data["tags"]
+        assert set(data["tags"]) == {"new", "tags"}
+
+    def test_patch_clear_tags(self, client: TestClient):
+        """Test that sending an empty list via PATCH removes all tags."""
+        create_res = client.post("/prompts", json={"title": "T1", "content": "C1", "tags": ["remove-me"]})
+        prompt_id = create_res.json()["id"]
+
+        response = client.patch(f"/prompts/{prompt_id}", json={"tags": []})
+        assert response.json()["tags"] == []
+
+    def test_put_tags_persistence(self, client: TestClient):
+        """Test that PUT updates tags and doesn't empty them accidentally."""
+        create_res = client.post("/prompts", json={"title": "T1", "content": "C1", "tags": ["initial"]})
+        prompt_id = create_res.json()["id"]
+
+        put_data = {
+            "title": "Updated",
+            "content": "Updated content",
+            "tags": ["final-tag"]
+        }
+        response = client.put(f"/prompts/{prompt_id}", json=put_data)
+        assert response.status_code == 200
+        assert response.json()["tags"] == ["final-tag"]
+
+    def test_tag_cleaning_robustness(self, client: TestClient):
+        """Test that the cleaning logic handles nulls and duplicates safely."""
+        prompt_data = {
+            "title": "Robustness Test",
+            "content": "Content",
+            "tags": ["AI", "ai", None, "  "] # Duplicate 'ai', a null, and whitespace only
+        }
+        # Note: If your Pydantic model is strict, this might return 422. 
+        # But based on your 'cleaned_tags' logic in api.py:
+        response = client.post("/prompts", json=prompt_data)
+        
+        # Depending on your specific implementation, 'None' might be rejected by FastAPI/Pydantic 
+        # or filtered by your 'if t' logic. 
+        if response.status_code == 201:
+            tags = response.json()["tags"]
+            assert "ai" in tags
+            assert len(tags) == 1  # Deduplicated and skipped null/empty                

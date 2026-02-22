@@ -105,3 +105,48 @@ class TestStorage:
         # Ensure the collection is NOT in storage
         result = storage.delete_collection("nonexistent-collection")
         assert result is False        
+ 
+    def test_get_all_tags_logic(self, storage):
+        """Covers lines 137-142: Aggregating unique tags from multiple prompts."""
+        p1 = Prompt(title="P1", content="C1", tags=["python", "fastapi"])
+        p2 = Prompt(title="P2", content="C2", tags=["fastapi", "docker"])
+        storage.create_prompt(p1)
+        storage.create_prompt(p2)
+        
+        tags = storage.get_all_tags()
+        # Verify it's a unique list (no duplicates)
+        assert set(tags) == {"python", "fastapi", "docker"}
+        assert len(tags) == 3
+
+    def test_get_all_tags_empty_storage(self, storage):
+        """Verify get_all_tags returns empty list when no prompts exist."""
+        assert storage.get_all_tags() == []
+
+    def test_filter_prompts_by_tags_and_logic(self, storage):
+        """Covers lines 165-174: Filtering logic requiring ALL tags to match."""
+        p1 = Prompt(title="Match", content="C1", tags=["a", "b", "c"])
+        p2 = Prompt(title="Partial", content="C2", tags=["a", "z"])
+        p3 = Prompt(title="None", content="C3", tags=["x"])
+        
+        prompts_list = [p1, p2, p3]
+        
+        # Test 1: Multiple tags (AND logic)
+        results = storage.filter_prompts_by_tags(prompts_list, ["a", "b"])
+        assert len(results) == 1
+        assert results[0].title == "Match"
+
+        # Test 2: Case insensitivity in search
+        results_case = storage.filter_prompts_by_tags(prompts_list, ["A"])
+        assert len(results_case) == 2  # Match and Partial
+
+    def test_filter_prompts_by_tags_no_input(self, storage):
+        """Covers line 166: Passing empty tags list returns original prompts."""
+        p_list = [Prompt(title="P1", content="C1", tags=["tag"])]
+        results = storage.filter_prompts_by_tags(p_list, [])
+        assert results == p_list
+
+    def test_filter_prompts_by_tags_no_match(self, storage):
+        """Verify empty list returned when no prompt contains the tag."""
+        p_list = [Prompt(title="P1", content="C1", tags=["a"])]
+        results = storage.filter_prompts_by_tags(p_list, ["nonexistent"])
+        assert results == []

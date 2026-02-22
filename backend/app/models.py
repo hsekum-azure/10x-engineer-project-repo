@@ -39,7 +39,9 @@ class PromptBase(BaseModel):
     content: str = Field(..., min_length=1, description="The main content of the prompt.")
     description: Optional[str] = Field(None, max_length=500, description="A brief description of the prompt.")
     collection_id: Optional[str] = Field(None, description="Identifier for the collection this prompt belongs to.")
-
+    
+    tags: List[str] = Field(default_factory=list, description="Tags associated with the prompt.")
+    
 
 class PromptCreate(PromptBase):
     """Model for creating a new prompt."""
@@ -64,6 +66,7 @@ class PromptPatch(BaseModel):
     content: Optional[str] = Field(None, min_length=1, description="The main content of the prompt.")
     description: Optional[str] = Field(None, max_length=500, description="A brief description of the prompt.")
     collection_id: Optional[str] = Field(None, description="Identifier for the collection this prompt belongs to.")
+    tags: Optional[List[str]] = Field(None, description="Updated tags list")
 
 
 class Prompt(PromptBase):
@@ -77,6 +80,7 @@ class Prompt(PromptBase):
     id: str = Field(default_factory=generate_id, description="Unique identifier for the prompt.")
     created_at: datetime = Field(default_factory=get_current_time, description="Timestamp when the prompt was created.")
     updated_at: datetime = Field(default_factory=get_current_time, description="Timestamp when the prompt was last updated.")
+    tags: List[str] = Field(default_factory=list, description="Tags associated with the prompt.")
 
     class Config:
         from_attributes = True

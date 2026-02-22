@@ -54,7 +54,8 @@ def health_check() -> HealthResponse:
 @app.get("/prompts", response_model=PromptList)
 def list_prompts(
     collection_id: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    tags: Optional[str] = None
 ) -> PromptList:
     """List all available prompts, optionally filtered by collection or search term.
     
@@ -74,6 +75,10 @@ def list_prompts(
     # Search if query provided
     if search:
         prompts = search_prompts(prompts, search)
+
+    if tags:
+        tags_list = [tag.strip().lower() for tag in tags.split(",")]
+        prompts = storage.filter_prompts_by_tags(prompts, tags_list)        
     
     # Sort by date (newest first)
     # Note: There might be an issue with the sorting...
@@ -149,6 +154,15 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate) -> Prompt:
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
     
+    raw_tags = prompt_data.tags if prompt_data.tags is not None else []
+
+    # 2. Use a conditional check inside the comprehension to skip non-string values
+    cleaned_tags = list(set(
+        str(t).lower().strip().replace(" ", "-") 
+        for t in raw_tags 
+        if t  # This skips None, empty strings "", and False
+    ))    
+
     updated_prompt = Prompt(
         id=existing.id,
         title=prompt_data.title,
@@ -156,7 +170,8 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate) -> Prompt:
         description=prompt_data.description,
         collection_id=prompt_data.collection_id,
         created_at=existing.created_at,
-        updated_at=get_current_time()
+        updated_at=get_current_time(),
+        tags= cleaned_tags
     )
     
     return storage.update_prompt(prompt_id, updated_prompt)
@@ -182,6 +197,13 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch) -> Prompt:
 
     update_data = prompt_data.model_dump(exclude_unset=True)
 
+    if 'tags' in update_data and update_data['tags'] is not None:
+        # Deduplicate, lowercase, and replace spaces with hyphens
+        update_data['tags'] = list(set(
+            str(tag).lower().strip().replace(" ", "-") 
+            for tag in update_data['tags'] if tag
+        ))
+        
     if not update_data:
         raise HTTPException(status_code=400, detail="At least one field must be provided to update")
 
@@ -286,3 +308,9 @@ def delete_collection(collection_id: str) -> None:
     storage.delete_collection(collection_id)
     
     return None
+
+@app.get("/tags")
+def list_tags():
+    """Returns a unique list of all tags."""
+    tags = storage.get_all_tags()
+    return {"tags": tags, "total": len(tags)}
