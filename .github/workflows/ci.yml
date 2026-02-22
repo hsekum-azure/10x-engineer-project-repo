@@ -16,12 +16,14 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.x'
+        # Pinned to 3.11 to match your local environment (3.11.13)
+        # This fixes the pydantic-core build error caused by Python 3.14
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
@@ -32,9 +34,7 @@ jobs:
     - name: Run linting
       run: |
         # Run ruff, report issues but do not fail the pipeline
-        ruff . --exit-zero
-        # Or use flake8 if you prefer:
-        # flake8 . || true
+        ruff check . --exit-zero
 
     - name: Run tests with coverage
       run: |
