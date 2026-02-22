@@ -7,6 +7,19 @@ Students should expand these tests significantly in Week 3.
 import pytest
 from fastapi.testclient import TestClient
 
+@pytest.fixture
+def sample_prompt_data():
+    return {
+        "title": "Sample Prompt",
+        "content": "This is a sample prompt content.",
+        "description": "Description for sample prompt",
+    }
+
+@pytest.fixture
+def sample_collection_data():
+    return {
+        "name": "Sample Collection"
+    }
 
 class TestHealth:
     """Tests for health endpoint."""
@@ -128,6 +141,99 @@ class TestPrompts:
         # Newest (Second) should be first
         assert prompts[0]["title"] == "Second"  # Will fail until Bug #3 fixed
 
+    def test_patch_prompt(self, client: TestClient, sample_prompt_data):
+        """Test partially updating a prompt."""
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        original_title = create_response.json()["title"]
+        original_content = create_response.json()["content"]
+
+        # Partially update it (only title and description)
+        patch_data = {
+            "title": "Partially Updated Title",
+            "description": "Updated description"
+        }
+
+        response = client.patch(f"/prompts/{prompt_id}", json=patch_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Partially Updated Title"
+        assert data["description"] == "Updated description"
+        # Ensure the content remains unchanged
+        assert data["content"] == original_content
+
+    def test_patch_prompt_not_found(self, client: TestClient):
+        """Test that patching a non-existent prompt returns 404."""
+        patch_data = {
+            "title": "Updated Title",
+            "description": "Updated description"
+        }
+        response = client.patch("/prompts/nonexistent-id", json=patch_data)
+        assert response.status_code == 404
+
+    def test_patch_empty_body(self, client: TestClient, sample_prompt_data):
+        """Test patching with no fields provided returns 400."""
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+
+        # Attempt to patch with an empty payload
+        response = client.patch(f"/prompts/{prompt_id}", json={})
+        assert response.status_code == 400   
+
+    def test_create_prompt_empty_title(self, client: TestClient, sample_prompt_data):
+        """Test creating a prompt with an empty title should fail."""
+        sample_prompt_data["title"] = ""
+        response = client.post("/prompts", json=sample_prompt_data)
+        assert response.status_code == 422  # Assuming validation is present
+    
+    def test_create_prompt_special_characters(self, client: TestClient, sample_prompt_data):
+        """Test creating a prompt with special characters."""
+        sample_prompt_data["title"] = "!@#$%^&*()_+"
+        response = client.post("/prompts", json=sample_prompt_data)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "!@#$%^&*()_+"
+    
+    def test_filter_prompts_by_collection(self, client: TestClient, sample_prompt_data, sample_collection_data):
+        """Test filtering prompts by collection."""
+        # Create a collection
+        collection_response = client.post("/collections", json=sample_collection_data)
+        collection_id = collection_response.json()["id"]
+        
+        # Create a prompt with this collection_id
+        sample_prompt_data["collection_id"] = collection_id
+        client.post("/prompts", json=sample_prompt_data)
+        
+        # Query prompts by collection_id
+        response = client.get(f"/prompts?collection_id={collection_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["prompts"]) == 1
+        assert data["prompts"][0]["collection_id"] == collection_id
+    
+    def test_search_prompts(self, client: TestClient, sample_prompt_data):
+        """Test searching prompts by keyword."""
+        client.post("/prompts", json=sample_prompt_data)
+        
+        response = client.get("/prompts?search=sample")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["prompts"]) > 0
+        assert "sample" in data["prompts"][0]["title"].lower()
+
+    def test_search_prompts_no_results(self, client: TestClient):
+        """Test searching prompts with a term that has no matches."""
+        response = client.get("/prompts?search=noresults")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["prompts"]) == 0
+    
+    def test_get_prompt_invalid_id(self, client: TestClient):
+        """Test retrieving a prompt with an invalid ID format."""
+        response = client.get("/prompts/invalid-id!@#")
+        assert response.status_code == 404    
 
 class TestCollections:
     """Tests for collection endpoints."""
@@ -177,3 +283,119 @@ class TestCollections:
             # Prompt exists with orphaned collection_id
             assert prompts[0]["collection_id"] == collection_id
             # After fix, collection_id should be None or prompt should be deleted
+    
+    def test_create_collection_empty_name(self, client: TestClient, sample_collection_data):
+        """Test creating a collection with an empty name should fail."""
+        sample_collection_data["name"] = ""
+        response = client.post("/collections", json=sample_collection_data)
+        assert response.status_code == 422
+    
+    def test_special_characters_in_collection_name(self, client: TestClient, sample_collection_data):
+        """Test creating a collection with special characters."""
+        sample_collection_data["name"] = "!@#$%^&*()_+"
+        response = client.post("/collections", json=sample_collection_data)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["name"] == "!@#$%^&*()_+"
+
+class TestCoverageGaps:
+    """Targeting missing lines: 122, 144, 148-150, 208, 241, 278"""
+
+    def test_create_prompt_nonexistent_collection(self, client: TestClient, sample_prompt_data):
+        """Line 122: Trigger 400 error when creating a prompt with a fake collection_id."""
+        bad_data = {**sample_prompt_data, "collection_id": "fake-id"}
+        response = client.post("/prompts", json=bad_data)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Collection not found"
+
+    def test_update_prompt_nonexistent_collection(self, client: TestClient, sample_prompt_data):
+        """Lines 144, 148-150: Trigger 400 error during PUT when updating to a fake collection_id."""
+        # 1. Create a prompt successfully
+        create_res = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_res.json()["id"]
+
+        # 2. Try to update it using a collection_id that doesn't exist
+        update_data = {**sample_prompt_data, "collection_id": "non-existent-id"}
+        response = client.put(f"/prompts/{prompt_id}", json=update_data)
+        
+        # This hits line 144 (validation check) and 148-150 (the error raise)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Collection not found"
+
+    def test_get_collection_success(self, client: TestClient, sample_collection_data):
+        """Line 208: Trigger the successful return of a single collection."""
+        create_res = client.post("/collections", json=sample_collection_data)
+        col_id = create_res.json()["id"]
+
+        response = client.get(f"/collections/{col_id}")
+        assert response.status_code == 200
+        assert response.json()["id"] == col_id
+
+    def test_create_collection_success(self, client: TestClient, sample_collection_data):
+        """Line 241: Explicitly trigger the storage creation for collections."""
+        response = client.post("/collections", json=sample_collection_data)
+        assert response.status_code == 201
+        assert response.json()["name"] == sample_collection_data["name"]
+
+    def test_delete_collection_with_prompts_cascade(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Line 278: Trigger the loop that deletes prompts belonging to a collection."""
+        # 1. Create collection
+        col_res = client.post("/collections", json=sample_collection_data)
+        col_id = col_res.json()["id"]
+
+        # 2. Create prompt inside that collection
+        prompt_data = {**sample_prompt_data, "collection_id": col_id}
+        p_res = client.post("/prompts", json=prompt_data)
+        prompt_id = p_res.json()["id"]
+
+        # 3. Delete the collection (Hits line 278 in the for-loop)
+        delete_res = client.delete(f"/collections/{col_id}")
+        assert delete_res.status_code == 204
+
+        # 4. Verify prompt was also deleted (Ensures the loop at 278 actually ran)
+        get_p = client.get(f"/prompts/{prompt_id}")
+        assert get_p.status_code == 404
+
+    def test_update_prompt_validate_collection_hit(self, client: TestClient, sample_prompt_data, sample_collection_data):
+        """Line 144: Force execution of the collection validation inside update_prompt."""
+        # 1. Create a real collection
+        col_res = client.post("/collections", json=sample_collection_data)
+        col_id = col_res.json()["id"]
+        
+        # 2. Create a prompt
+        p_res = client.post("/prompts", json=sample_prompt_data)
+        p_id = p_res.json()["id"]
+
+        # 3. Update prompt with the REAL collection_id (Hits line 144 'if' and passes it)
+        update_data = {**sample_prompt_data, "collection_id": col_id}
+        response = client.put(f"/prompts/{p_id}", json=update_data)
+        assert response.status_code == 200
+        assert response.json()["collection_id"] == col_id
+
+    def test_get_collection_execution(self, client: TestClient, sample_collection_data):
+        """Line 208: Ensure the return statement of get_collection is executed."""
+        create_res = client.post("/collections", json=sample_collection_data)
+        col_id = create_res.json()["id"]
+
+        # This call must complete successfully to cover the 'return' on line 208
+        response = client.get(f"/collections/{col_id}")
+        assert response.status_code == 200
+        assert response.json()["id"] == col_id
+
+    def test_delete_collection_with_multiple_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Line 278: Ensure the loop for deleting prompts actually executes logic."""
+        # 1. Create collection
+        col_res = client.post("/collections", json=sample_collection_data)
+        col_id = col_res.json()["id"]
+
+        # 2. Create TWO prompts in this collection to ensure the loop at 278 is robust
+        for i in range(2):
+            p_data = {**sample_prompt_data, "title": f"Prompt {i}", "collection_id": col_id}
+            client.post("/prompts", json=p_data)
+
+        # 3. Delete the collection (Hits line 278 loop multiple times)
+        response = client.delete(f"/collections/{col_id}")
+        assert response.status_code == 204
+
+        # 4. Verify collection is gone
+        assert client.get(f"/collections/{col_id}").status_code == 404        
