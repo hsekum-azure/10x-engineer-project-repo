@@ -34,12 +34,12 @@ class PromptBase(BaseModel):
         content (str): The main content of the prompt.
         description (Optional[str]): A brief description of the prompt.
         collection_id (Optional[str]): Identifier for the collection this prompt belongs to.
+        tags (List[str]): A list of tags associated with the prompt. Tags help in categorizing and searching prompts.
     """
     title: str = Field(..., min_length=1, max_length=200, description="The title of the prompt.")
     content: str = Field(..., min_length=1, description="The main content of the prompt.")
     description: Optional[str] = Field(None, max_length=500, description="A brief description of the prompt.")
     collection_id: Optional[str] = Field(None, description="Identifier for the collection this prompt belongs to.")
-    
     tags: List[str] = Field(default_factory=list, description="Tags associated with the prompt.")
     
 
@@ -61,6 +61,7 @@ class PromptPatch(BaseModel):
         content (Optional[str]): The main content of the prompt.
         description (Optional[str]): A brief description of the prompt.
         collection_id (Optional[str]): Identifier for the collection this prompt belongs to.
+        tags (Optional[List[str]]): Updated tags list associated with prompt.
     """
     title: Optional[str] = Field(None, min_length=1, max_length=200, description="The title of the prompt.")
     content: Optional[str] = Field(None, min_length=1, description="The main content of the prompt.")
@@ -76,6 +77,7 @@ class Prompt(PromptBase):
         id (str): Unique identifier for the prompt.
         created_at (datetime): Timestamp when the prompt was created.
         updated_at (datetime): Timestamp when the prompt was last updated.
+        tags (List[str]): Tags associated with the prompt.
     """
     id: str = Field(default_factory=generate_id, description="Unique identifier for the prompt.")
     created_at: datetime = Field(default_factory=get_current_time, description="Timestamp when the prompt was created.")
