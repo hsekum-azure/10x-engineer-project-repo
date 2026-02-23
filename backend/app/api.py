@@ -13,7 +13,7 @@ from app.models import (
 from app.storage import storage
 from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
 from app import __version__
-from app.seed_data import seed_initial_data
+#from app.seed_data import seed_initial_data
 
 
 app = FastAPI(
@@ -21,7 +21,7 @@ app = FastAPI(
     description="AI Prompt Engineering Platform",
     version=__version__
 )
-# uncomment below code to seed the data initially
+# uncomment below code and import of seed to seed the data initially
 # @app.on_event("startup")
 # def startup_event():
 #     if not storage.get_all_collections():
