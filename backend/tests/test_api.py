@@ -266,9 +266,6 @@ class TestCollections:
         col_response = client.post("/collections", json=sample_collection_data)
         collection_id = col_response.json()["id"]
         
-        # Create prompt in collection
-        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
-        
         # Delete collection
         client.delete(f"/collections/{collection_id}")
         
