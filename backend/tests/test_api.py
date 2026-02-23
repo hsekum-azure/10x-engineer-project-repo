@@ -99,7 +99,6 @@ class TestPrompts:
         # Create a prompt first
         create_response = client.post("/prompts", json=sample_prompt_data)
         prompt_id = create_response.json()["id"]
-        original_updated_at = create_response.json()["updated_at"]
         
         # Update it
         updated_data = {
@@ -146,7 +145,6 @@ class TestPrompts:
         # Create a prompt first
         create_response = client.post("/prompts", json=sample_prompt_data)
         prompt_id = create_response.json()["id"]
-        original_title = create_response.json()["title"]
         original_content = create_response.json()["content"]
 
         # Partially update it (only title and description)
@@ -271,7 +269,6 @@ class TestCollections:
         # Create prompt in collection
         prompt_data = {**sample_prompt_data, "collection_id": collection_id}
         prompt_response = client.post("/prompts", json=prompt_data)
-        prompt_id = prompt_response.json()["id"]
         
         # Delete collection
         client.delete(f"/collections/{collection_id}")

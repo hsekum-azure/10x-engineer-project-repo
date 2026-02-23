@@ -1,4 +1,3 @@
-import pytest
 from datetime import datetime, timedelta
 from app.models import Prompt
 from app.utils import (

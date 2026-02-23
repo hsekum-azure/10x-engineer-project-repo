@@ -2,7 +2,6 @@ import pytest
 from app.seed_data import seed_initial_data
 # Import the global 'storage' instance, NOT the 'Storage' class
 from app.storage import storage as global_storage 
-from app.models import Collection, Prompt
 
 @pytest.fixture
 def storage_instance():
