@@ -1,4 +1,4 @@
-![Python Version](https://img.shields.io/badge/python-3.10%2B-green) [![codecov](https://codecov.io/github/hsekum-azure/10x-engineer-project-repo/graph/badge.svg?token=6ZPWWGNOPC)](https://codecov.io/github/hsekum-azure/10x-engineer-project-repo)
+![Python Version](https://img.shields.io/badge/python-3.10%2B-green) [![codecov](https://codecov.io/github/hsekum-azure/10x-engineer-project-repo/branch/Week-3/graph/badge.svg?token=6ZPWWGNOPC)](https://codecov.io/github/hsekum-azure/10x-engineer-project-repo)
 
 # PromptLab
 
