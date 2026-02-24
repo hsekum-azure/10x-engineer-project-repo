@@ -408,7 +408,7 @@ class TestTaggingSystem:
         tags = response.json()["tags"]
         
         # Verify slugification: lowercase, trimmed, and spaces to hyphens
-        assert "OpenAI" in tags
+        assert "openai" in tags
         assert len(tags) == 3
 
     def test_get_all_tags_endpoint(self, client: TestClient):

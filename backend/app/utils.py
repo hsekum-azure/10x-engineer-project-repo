@@ -108,3 +108,12 @@ def extract_variables(content: str) -> List[str]:
     import re
     pattern = r'\{\{(\w+)\}\}'
     return re.findall(pattern, content)
+
+def format_tags(tags: List[str]) -> List[str]:
+    """Deduplicate, lowercase, and hyphenate tags."""
+    if not tags:
+        return []
+    return list(set(
+        str(t).lower().strip().replace(" ", "-") 
+        for t in tags if t
+    ))

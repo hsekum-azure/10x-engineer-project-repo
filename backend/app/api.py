@@ -11,7 +11,7 @@ from app.models import (
     get_current_time
 )
 from app.storage import storage
-from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
+from app.utils import format_tags, sort_prompts_by_date, filter_prompts_by_collection, search_prompts
 from app import __version__
 #from app.seed_data import seed_initial_data
 
@@ -77,11 +77,11 @@ def list_prompts(
         prompts = search_prompts(prompts, search)
 
     if tags:
-        tags_list = [tag.strip().lower() for tag in tags.split(",")]
-        prompts = storage.filter_prompts_by_tags(prompts, tags_list)        
+        raw_tags_list = tags.split(",")
+        tags_list = format_tags(raw_tags_list)
+        prompts = storage.filter_prompts_by_tags(prompts, tags_list)          
     
     # Sort by date (newest first)
-    # Note: There might be an issue with the sorting...
     prompts = sort_prompts_by_date(prompts, descending=True)
     
     return PromptList(prompts=prompts, total=len(prompts))
@@ -106,7 +106,29 @@ def get_prompt(prompt_id: str) -> Prompt:
     
     return prompt
 
+def _validate_collection(collection_id: Optional[str]) -> None:
+    """Validate that a collection exists for the given collection_id.
 
+    This helper function checks the provided `collection_id` against the
+    storage backend and raises an HTTP 400 error when a non-empty id is
+    supplied but no matching collection exists. If `collection_id` is
+    falsy (None or empty), validation is skipped.
+
+    Args:
+        collection_id (Optional[str]): ID of the collection to validate.
+
+    Raises:
+        HTTPException: HTTP 400 Bad Request when the collection is not found.
+
+    Returns:
+        None: Returns None on success (no exception raised).
+    """
+    if collection_id and not storage.get_collection(collection_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Collection not found"
+        )
+    
 @app.post("/prompts", response_model=Prompt, status_code=201)
 def create_prompt(prompt_data: PromptCreate) -> Prompt:
     """Create a new prompt.
@@ -121,14 +143,14 @@ def create_prompt(prompt_data: PromptCreate) -> Prompt:
         HTTPException: If the specified collection ID does not exist.
     """
     # Validate collection exists if provided
-    if prompt_data.collection_id:
-        collection = storage.get_collection(prompt_data.collection_id)
-        if not collection:
-            raise HTTPException(status_code=400, detail="Collection not found")
+    _validate_collection(prompt_data.collection_id)
+    data = prompt_data.model_dump()
     
-    prompt = Prompt(**prompt_data.model_dump())
+    if data.get("tags"):
+        data["tags"] = format_tags(data.get("tags") or [])
+    prompt = Prompt(**data)
+    
     return storage.create_prompt(prompt)
-
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
 def update_prompt(prompt_id: str, prompt_data: PromptUpdate) -> Prompt:
@@ -149,19 +171,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate) -> Prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
     
     # Validate collection if provided
-    if prompt_data.collection_id:
-        collection = storage.get_collection(prompt_data.collection_id)
-        if not collection:
-            raise HTTPException(status_code=400, detail="Collection not found")
-    
-    raw_tags = prompt_data.tags if prompt_data.tags is not None else []
-
-    # 2. Use a conditional check inside the comprehension to skip non-string values
-    cleaned_tags = list(set(
-        str(t).lower().strip().replace(" ", "-") 
-        for t in raw_tags 
-        if t  # This skips None, empty strings "", and False
-    ))    
+    _validate_collection(prompt_data.collection_id)       
 
     updated_prompt = Prompt(
         id=existing.id,
@@ -171,7 +181,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate) -> Prompt:
         collection_id=prompt_data.collection_id,
         created_at=existing.created_at,
         updated_at=get_current_time(),
-        tags= cleaned_tags
+        tags= format_tags(prompt_data.tags)
     )
     
     return storage.update_prompt(prompt_id, updated_prompt)
@@ -199,13 +209,14 @@ def patch_prompt(prompt_id: str, prompt_data: PromptPatch) -> Prompt:
 
     if 'tags' in update_data and update_data['tags'] is not None:
         # Deduplicate, lowercase, and replace spaces with hyphens
-        update_data['tags'] = list(set(
-            str(tag).lower().strip().replace(" ", "-") 
-            for tag in update_data['tags'] if tag
-        ))
-        
+        update_data['tags'] = format_tags(update_data['tags'])      
+
     if not update_data:
         raise HTTPException(status_code=400, detail="At least one field must be provided to update")
+    
+    # NEW: Validate the collection if it's being changed in the PATCH
+    if "collection_id" in update_data:
+        _validate_collection(update_data["collection_id"])
 
     updated_prompt = existing.model_copy(update=update_data)
     updated_prompt.updated_at = get_current_time()
@@ -290,8 +301,7 @@ def delete_collection(collection_id: str) -> None:
     Raises:
         HTTPException: If the collection with the given ID is not found.
     """
-    # Should either: delete the prompts, set collection_id to None, or prevent deletion
-
+    
     # As of now deleting the collection and prompts inside it 
     # From frontend we can display popup to confirm or implement based on requirement
         
