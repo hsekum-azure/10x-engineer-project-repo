@@ -220,14 +220,20 @@ promptlab/
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   ├── test_api.py
+│   │   ├── test_models.py
+│   │   ├── test_seeddata.py
+│   │   ├── test_storage.py
+│   │   ├── test_utils.py
 │   │   └── conftest.py
+│   ├── Dockerfile
 │   ├── main.py
 │   └── requirements.txt
 │
 ├── frontend/        
 ├── specs/           
-├── docs/            
-└── .github/         
+├── docs/    
+├── docker-compose.yml        
+└── .github/workflows/ci.yml         
 ```
 
 ---
