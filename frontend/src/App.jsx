@@ -1,90 +1,188 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Layout from './components/layout/Layout';
 import PromptList from './components/prompt/PromptList';
+import CollectionList from './components/collection/CollectionList';
+import CollectionForm from './components/collection/CollectionForm';
 import SearchBar from './components/shared/SearchBar';
 import Button from './components/shared/Button';
 import Modal from './components/shared/Modal';
 import PromptForm from './components/prompt/PromptForm';
-
-// Mock Data matching your Python Pydantic Models
-const MOCK_PROMPTS = [
-  {
-    id: "1",
-    title: "Java Unit Test Generator",
-    content: "Write a JUnit 5 test for the following class...",
-    description: "Generates boilerplate for Spring Boot controllers.",
-    tags: ["java", "testing", "spring-boot"],
-    created_at: "2026-02-28T12:00:00"
-  },
-  {
-    id: "2",
-    title: "SQL Optimizer",
-    content: "Explain the execution plan for this query...",
-    description: "Helps identify missing indexes in PostgreSQL.",
-    tags: ["sql", "database", "performance"],
-    created_at: "2026-02-28T14:30:00"
-  },
-  {
-    id: "3",
-    title: "React Component Refactor",
-    content: "Convert this class component to functional...",
-    description: "Modernizes legacy React codebases.",
-    tags: ["react", "frontend", "javascript"],
-    created_at: "2026-02-28T15:00:00"
-  }
-];
+import LoadingSpinner from './components/shared/LoadingSpinner';
+import ErrorMessage from './components/shared/ErrorMessage';
+import { promptApi } from './api/prompts'; 
+import { collectionApi } from './api/collections';
 
 function App() {
+  // --- State Management ---
+  const [view, setView] = useState('prompts'); // Navigation state: 'prompts' | 'collections'
+  const [prompts, setPrompts] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isModalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingPrompt, setEditingPrompt] = useState(null);
+  const [editingCollection, setEditingCollection] = useState(null);
 
-  // Simple search logic to demonstrate the SearchBar component
-  const filteredPrompts = MOCK_PROMPTS.filter(p => 
-    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+
+  // --- Data Loading ---
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  const handleDeleteCollection = async (id) => {
+    if (window.confirm("Delete this collection? This will also remove all prompts inside it (as per your backend logic).")) {
+      try {
+        await collectionApi.deleteCollection(id);
+        loadAllData(); 
+      } catch (err) {
+        alert("Error: " + err);
+      }
+    }
+  };
+
+  const handleEditCollectionClick = (collection) => {
+    setEditingCollection(collection);
+    setModalOpen(true);
+  };
+
+  const handleDeletePrompt = async (id) => {
+    if (window.confirm("Are you sure you want to delete this prompt?")) {
+      try {
+        await promptApi.deletePrompt(id);
+        loadAllData(); // Refresh list
+      } catch (err) {
+        alert("Error deleting: " + err);
+      }
+    }
+  };
+
+  const handleEditClick = (prompt) => {
+    setEditingPrompt(prompt);
+    setModalOpen(true);
+  };
+
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      // Fetch both simultaneously for a faster UI load
+      const [pData, cData] = await Promise.all([
+        promptApi.getPrompts(),
+        collectionApi.getCollections()
+      ]);
+      setPrompts(pData.prompts);
+      setCollections(cData.collections);
+      setError(null);
+    } catch (err) {
+      console.error("API Error:", err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Handlers ---
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    setLoading(true);
+    // API-side filtering
+    promptApi.getPrompts({ search: query })
+      .then(data => {
+        setPrompts(data.prompts);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err);
+        setLoading(false);
+      });
+  };
+
+  // Triggered after a successful POST in either form
+  const handleRefresh = () => {
+    setModalOpen(false);
+    setEditingPrompt(null);
+    setEditingCollection(null);
+    loadAllData();
+  };
+
+  // --- UI Logic Helpers ---
+  const renderContent = () => {
+    if (loading) return <LoadingSpinner />;
+    if (error) return <ErrorMessage message={error} />;
+
+    if (view === 'prompts') {
+      return prompts.length > 0 ? (
+        <PromptList 
+          prompts={prompts} 
+          onDelete={handleDeletePrompt} 
+          onEdit={handleEditClick} 
+        />
+      ) : (
+        <div className="text-center py-20 border-2 border-dashed border-gray-100 rounded-2xl">
+          <p className="text-gray-400">No prompts found in your library.</p>
+        </div>
+      );
+    }
+
+    if (view === 'collections') {
+      return collections.length > 0 ? (
+        <CollectionList 
+          collections={collections} 
+          onDelete={handleDeleteCollection} 
+          onEdit={handleEditCollectionClick} 
+        />
+      ) : (
+        <div className="text-center py-20 border-2 border-dashed border-gray-100 rounded-2xl">
+          <p className="text-gray-400">No collections created yet.</p>
+        </div>
+      );
+    }
+  };
 
   return (
-    <Layout>
-      {/* Header Section of the Main Content */}
+    <Layout onNavigate={setView} activeView={view}>
+      {/* Dynamic Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Prompts
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight capitalize">
+            {view}
           </h1>
           <p className="text-gray-500 mt-1">
-            Manage and organize your AI prompt library.
+            {view === 'prompts' 
+              ? 'Manage and search your AI prompt library.' 
+              : 'Organize your prompts into logical groups.'}
           </p>
         </div>
         
         <div className="flex items-center gap-3">
-          <SearchBar onSearch={setSearchQuery} />
+          {view === 'prompts' && <SearchBar onSearch={handleSearch} />}
           <Button onClick={() => setModalOpen(true)}>
-            + Create
+            + Create {view === 'prompts' ? 'Prompt' : 'Collection'}
           </Button>
         </div>
       </div>
 
-      {/* Main Prompt List Grid */}
-      {filteredPrompts.length > 0 ? (
-        <PromptList prompts={filteredPrompts} />
-      ) : (
-        <div className="text-center py-20 border-2 border-dashed border-gray-100 rounded-2xl">
-          <p className="text-gray-400">No prompts found matching your search.</p>
-        </div>
-      )}
+      {/* Main Content Area */}
+      {renderContent()}
 
-      {/* Shared Modal for creating a new Prompt */}
+      {/* Shared Modal Logic */}
       <Modal 
         isOpen={isModalOpen} 
-        onClose={() => setModalOpen(false)} 
-        title="Create New Prompt"
+        onClose={() => {
+          setModalOpen(false);
+          setEditingPrompt(null);
+        }} 
+        title={editingPrompt ? "Edit Prompt" : (view === 'prompts' ? "Create New Prompt" : "Create New Collection")}
       >
-        <PromptForm />
-        <div className="mt-6 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button onClick={() => alert("Connecting to Python Backend soon!")}>Save Prompt</Button>
-        </div>
+        {view === 'prompts' ? (
+          <PromptForm 
+            onSave={handleRefresh} 
+            collections={collections} 
+            initialData={editingPrompt} // Pass this!
+          />
+        ) : (
+          <CollectionForm onSave={handleRefresh} initialData={editingCollection} />
+        )}
       </Modal>
     </Layout>
   );
