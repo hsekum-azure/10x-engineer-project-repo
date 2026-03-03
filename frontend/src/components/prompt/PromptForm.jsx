@@ -3,8 +3,6 @@ import { promptApi } from '../../api/prompts';
 import Button from '../shared/Button';
 
 export default function PromptForm({ onSave, collections = [], initialData = null }) {
-  // 1. Initialize state. If initialData exists, we use it.
-  // Note: For tags, we join the array into a comma-separated string for the input.
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     content: initialData?.content || '',
@@ -14,8 +12,8 @@ export default function PromptForm({ onSave, collections = [], initialData = nul
   });
 
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({}); // New: Validation state
 
-  // 2. If initialData changes (e.g., user clicks a different edit button), update the form
   useEffect(() => {
     if (initialData) {
       setFormData({
@@ -28,11 +26,23 @@ export default function PromptForm({ onSave, collections = [], initialData = nul
     }
   }, [initialData]);
 
+  // Validation Logic
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.title.trim()) newErrors.title = "Title is required";
+    if (!formData.content.trim()) newErrors.content = "Content is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check validation before proceeding
+    if (!validate()) return;
+
     setLoading(true);
     
-    // Formatting tags back into a List[str] for your Python backend
     const payload = {
       ...formData,
       tags: formData.tags 
@@ -42,15 +52,13 @@ export default function PromptForm({ onSave, collections = [], initialData = nul
 
     try {
       if (initialData?.id) {
-        // Update existing prompt (PUT or PATCH)
         await promptApi.updatePrompt(initialData.id, payload);
       } else {
-        // Create new prompt
         await promptApi.createPrompt(payload);
       }
-      onSave(); // Refresh list and close modal in App.jsx
+      onSave(); 
     } catch (err) {
-      alert("Failed to save prompt: " + err);
+      setErrors({ api: "Failed to save: " + err });
     } finally {
       setLoading(false);
     }
@@ -59,24 +67,38 @@ export default function PromptForm({ onSave, collections = [], initialData = nul
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Title Input */}
-      <input 
-        required
-        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-        placeholder="Prompt Title"
-        value={formData.title}
-        onChange={(e) => setFormData({...formData, title: e.target.value})}
-      />
+      <div>
+        <input 
+          className={`w-full p-2 border rounded-lg outline-none focus:ring-2 transition-all ${
+            errors.title ? 'border-red-500 focus:ring-red-200' : 'focus:ring-blue-500'
+          }`}
+          placeholder="Prompt Title"
+          value={formData.title}
+          onChange={(e) => {
+            setFormData({...formData, title: e.target.value});
+            if (errors.title) setErrors({...errors, title: null}); // Clear error on type
+          }}
+        />
+        {errors.title && <p className="text-red-500 text-xs mt-1 font-medium">{errors.title}</p>}
+      </div>
       
       {/* Content Area */}
-      <textarea 
-        required
-        className="w-full p-2 border rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none"
-        placeholder="Prompt Content"
-        value={formData.content}
-        onChange={(e) => setFormData({...formData, content: e.target.value})}
-      />
+      <div>
+        <textarea 
+          className={`w-full p-2 border rounded-lg h-32 outline-none focus:ring-2 transition-all ${
+            errors.content ? 'border-red-500 focus:ring-red-200' : 'focus:ring-blue-500'
+          }`}
+          placeholder="Prompt Content"
+          value={formData.content}
+          onChange={(e) => {
+            setFormData({...formData, content: e.target.value});
+            if (errors.content) setErrors({...errors, content: null}); // Clear error on type
+          }}
+        />
+        {errors.content && <p className="text-red-500 text-xs mt-1 font-medium">{errors.content}</p>}
+      </div>
 
-      {/* Description Area (New) */}
+      {/* Description Area */}
       <input 
         className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
         placeholder="Brief Description (Optional)"
@@ -111,6 +133,9 @@ export default function PromptForm({ onSave, collections = [], initialData = nul
         onChange={(e) => setFormData({...formData, tags: e.target.value})}
       />
       
+      {/* API Error Feedback */}
+      {errors.api && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-lg">{errors.api}</p>}
+
       {/* Submit Button */}
       <div className="pt-2">
         <Button 

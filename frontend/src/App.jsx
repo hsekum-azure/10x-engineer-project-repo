@@ -10,37 +10,37 @@ import Modal from './components/shared/Modal';
 import PromptForm from './components/prompt/PromptForm';
 import LoadingSpinner from './components/shared/LoadingSpinner';
 import ErrorMessage from './components/shared/ErrorMessage';
+import ConfirmDialog from './components/shared/ConfirmDialog'; 
 import { promptApi } from './api/prompts'; 
 import { collectionApi } from './api/collections';
 
 function App() {
-  // --- State Management ---
   const [view, setView] = useState('prompts'); 
   const [prompts, setPrompts] = useState([]);
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isModalOpen, setModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(""); // This state drives the highlight
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [editingCollection, setEditingCollection] = useState(null);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
   
-  // Filtering States
   const [activeCollection, setActiveCollection] = useState("");
-  const [activeTags, setActiveTags] = useState([]); // Array for multi-select
+  const [activeTags, setActiveTags] = useState([]); 
 
-  // --- Derived Data: Unique Tags ---
+  const [confirmDelete, setConfirmDelete] = useState({ 
+    isOpen: false, type: null, id: null, title: '' 
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const allAvailableTags = useMemo(() => {
     const tags = new Set();
     prompts.forEach(p => p.tags?.forEach(t => tags.add(t)));
     return Array.from(tags).sort();
   }, [prompts]);
 
-  // --- Data Loading ---
-  useEffect(() => {
-    loadAllData();
-  }, []);
+  useEffect(() => { loadAllData(); }, []);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -53,7 +53,6 @@ function App() {
       setCollections(cData.collections);
       setError(null);
     } catch (err) {
-      console.error("API Error:", err);
       setError(err);
     } finally {
       setLoading(false);
@@ -78,10 +77,9 @@ function App() {
       });
   };
 
-  // --- Handlers ---
   const handleSearch = (query) => {
-    setSearchQuery(query);
-    fetchFilteredPrompts(query, activeCollection, activeTags);
+    setSearchQuery(query); // Update state for the UI
+    fetchFilteredPrompts(query, activeCollection, activeTags); // Filter data
   };
 
   const handleCollectionFilter = (id) => {
@@ -90,9 +88,7 @@ function App() {
   };
 
   const handleTagToggle = (tag) => {
-    const newTags = activeTags.includes(tag)
-      ? activeTags.filter(t => t !== tag)
-      : [...activeTags, tag];
+    const newTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag];
     setActiveTags(newTags);
     fetchFilteredPrompts(searchQuery, activeCollection, newTags);
   };
@@ -104,85 +100,87 @@ function App() {
     fetchFilteredPrompts("", "", []);
   };
 
-  const handleDeletePrompt = async (id) => {
-    if (window.confirm("Are you sure you want to delete this prompt?")) {
-      try {
-        await promptApi.deletePrompt(id);
-        loadAllData();
-      } catch (err) {
-        alert("Error deleting: " + err);
-      }
+  const handleDeletePrompt = (id) => {
+    const prompt = prompts.find(p => p.id === id);
+    setConfirmDelete({ isOpen: true, type: 'prompt', id, title: prompt?.title || 'this prompt' });
+  };
+
+  const handleDeleteCollection = (id) => {
+    const col = collections.find(c => c.id === id);
+    setConfirmDelete({ isOpen: true, type: 'collection', id, title: col?.name || 'this collection' });
+  };
+
+  const executeDelete = async () => {
+    setIsDeleting(true);
+    try {
+      if (confirmDelete.type === 'prompt') await promptApi.deletePrompt(confirmDelete.id);
+      else await collectionApi.deleteCollection(confirmDelete.id);
+      setConfirmDelete({ isOpen: false, type: null, id: null, title: '' });
+      loadAllData();
+      if (selectedPrompt) setSelectedPrompt(null);
+    } catch (err) {
+      alert("Delete failed: " + err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleDeleteCollection = async (id) => {
-    if (window.confirm("Delete this collection? This will also remove all prompts inside it.")) {
-      try {
-        await collectionApi.deleteCollection(id);
-        loadAllData(); 
-      } catch (err) {
-        alert("Error: " + err);
-      }
-    }
-  };
+  const handleEditClick = (prompt) => { setEditingPrompt(prompt); setModalOpen(true); };
+  const handleEditCollectionClick = (collection) => { setEditingCollection(collection); setModalOpen(true); };
+  const handleViewPrompt = (prompt) => { setSelectedPrompt(prompt); setModalOpen(true); };
+  const handleCloseModal = () => { setModalOpen(false); setEditingPrompt(null); setEditingCollection(null); setSelectedPrompt(null); };
+  const handleRefresh = () => { handleCloseModal(); loadAllData(); };
 
-  const handleEditClick = (prompt) => {
-    setEditingPrompt(prompt);
-    setModalOpen(true);
-  };
-
-  const handleEditCollectionClick = (collection) => {
-    setEditingCollection(collection);
-    setModalOpen(true);
-  };
-
-  const handleViewPrompt = (prompt) => {
-    setSelectedPrompt(prompt);
-    setModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setModalOpen(false);
-    setEditingPrompt(null);
-    setEditingCollection(null);
-    setSelectedPrompt(null);
-  };
-
-  const handleRefresh = () => {
-    handleCloseModal();
-    loadAllData();
-  };
-
-  // --- Content Renderer ---
   const renderContent = () => {
     if (loading) return <LoadingSpinner />;
     if (error) return <ErrorMessage message={error} />;
 
     if (view === 'prompts') {
-      return prompts.length > 0 ? (
-        <PromptList 
-          prompts={prompts} 
-          onDelete={handleDeletePrompt} 
-          onEdit={handleEditClick} 
-          onView={handleViewPrompt}
-        />
-      ) : (
-        <div className="text-center py-20 border-2 border-dashed border-gray-100 rounded-2xl">
-          <p className="text-gray-400">No prompts match your filters.</p>
+      if (prompts.length > 0) {
+        return (
+          <PromptList 
+            prompts={prompts} 
+            collections={collections} 
+            searchQuery={searchQuery}
+            onDelete={handleDeletePrompt} 
+            onEdit={handleEditClick} 
+            onView={handleViewPrompt}
+          />
+        );
+      }
+      return (
+        <div className="text-center py-20 bg-white border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center">
+          <div className="text-4xl mb-3">✍️</div>
+          <p className="text-gray-500 font-medium mb-4">No prompts found.</p>
+          <Button onClick={() => setModalOpen(true)}>+ Create First Prompt</Button>
         </div>
       );
     }
 
     if (view === 'collections') {
-      return collections.length > 0 ? (
-        <CollectionList 
-          collections={collections} 
-          onDelete={handleDeleteCollection} 
-          onEdit={handleEditCollectionClick} 
-        />
-      ) : (
-        <div className="text-center py-20 border-2 border-dashed border-gray-100 rounded-2xl">
-          <p className="text-gray-400">No collections created yet.</p>
+      // 1. Calculate how many prompts are in each collection
+      const promptCounts = prompts.reduce((acc, prompt) => {
+        if (prompt.collection_id) {
+          acc[prompt.collection_id] = (acc[prompt.collection_id] || 0) + 1;
+        }
+        return acc;
+      }, {});
+
+      if (collections.length > 0) {
+        return (
+          <CollectionList 
+            collections={collections} 
+            promptCounts={promptCounts} // 2. Pass counts to the list
+            onDelete={handleDeleteCollection} 
+            onEdit={handleEditCollectionClick} 
+          />
+        );
+      }
+      return (
+        <div className="text-center py-20 bg-white border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center">
+          <div className="text-4xl mb-3">📂</div>
+          <p className="text-gray-400 font-medium mb-4">No collections created yet.</p>
+          <Button onClick={() => setModalOpen(true)}>+ Create Collection</Button>
         </div>
       );
     }
@@ -190,101 +188,54 @@ function App() {
 
   return (
     <Layout onNavigate={setView} activeView={view}>
-      {/* 1. Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight capitalize">{view}</h1>
-          <p className="text-gray-500 mt-1">Manage and organize your AI library.</p>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight capitalize">{view}</h1>
+          <p className="text-sm md:text-base text-gray-500 mt-1">Manage and organize your AI library.</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          {view === 'prompts' && <SearchBar onSearch={handleSearch} />}
-          <Button onClick={() => setModalOpen(true)}>
-            + Create {view === 'prompts' ? 'Prompt' : 'Collection'}
-          </Button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {view === 'prompts' && (
+            <div className="w-full sm:w-auto">
+              <SearchBar onSearch={handleSearch} value={searchQuery} />
+            </div>
+          )}
+          <Button onClick={() => setModalOpen(true)} className="w-full sm:w-auto">+ Create</Button>
         </div>
       </div>
 
-      {/* 2. Filter Bar (Contextual) */}
       {view === 'prompts' && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 mb-8 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center gap-6">
-            
-            {/* Collection Dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Collection</span>
-              <select 
-                value={activeCollection}
-                onChange={(e) => handleCollectionFilter(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">Collection</span>
+              <select value={activeCollection} onChange={(e) => handleCollectionFilter(e.target.value)} className="w-full lg:w-auto bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none">
                 <option value="">All Collections</option>
-                {collections.map(col => (
-                  <option key={col.id} value={col.id}>{col.name}</option>
-                ))}
+                {collections.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
               </select>
             </div>
-
-            {/* Tags Toggle Cloud */}
             <div className="flex-1 flex items-center gap-3 overflow-hidden">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tags</span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-nowrap lg:flex-wrap gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
                 {allAvailableTags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => handleTagToggle(tag)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                      activeTags.includes(tag)
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    #{tag}
-                  </button>
+                  <button key={tag} onClick={() => handleTagToggle(tag)} className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${activeTags.includes(tag) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>#{tag}</button>
                 ))}
               </div>
             </div>
-
-            {/* Reset Button */}
             {(activeCollection || activeTags.length > 0 || searchQuery) && (
-              <button 
-                onClick={handleResetFilters}
-                className="text-xs font-bold text-red-500 hover:underline px-2"
-              >
-                Reset Filters
-              </button>
+              <button onClick={handleResetFilters} className="text-xs font-bold text-red-500 hover:underline px-2 lg:ml-auto">Reset Filters</button>
             )}
           </div>
         </div>
       )}
 
-      {/* 3. Main Content */}
-      {renderContent()}
+      <div className="w-full">{renderContent()}</div>
 
-      {/* 4. Shared Modal */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={handleCloseModal} 
-        title={
-          selectedPrompt ? "Prompt Details" : 
-          editingPrompt ? "Edit Prompt" : 
-          editingCollection ? "Edit Collection" :
-          (view === 'prompts' ? "Create New Prompt" : "Create New Collection")
-        }
-      >
-        {selectedPrompt ? (
-          <PromptDetail 
-            prompt={selectedPrompt} 
-            collections={collections}
-            onEdit={(p) => { setSelectedPrompt(null); handleEditClick(p); }}
-            onDelete={(id) => { handleCloseModal(); handleDeletePrompt(id); }}
-          />
-        ) : view === 'prompts' ? (
-          <PromptForm onSave={handleRefresh} collections={collections} initialData={editingPrompt} />
-        ) : (
-          <CollectionForm onSave={handleRefresh} initialData={editingCollection} />
-        )}
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedPrompt ? "Details" : editingPrompt ? "Edit Prompt" : editingCollection ? "Edit Collection" : (view === 'prompts' ? "New Prompt" : "New Collection")}>
+        {selectedPrompt ? <PromptDetail prompt={selectedPrompt} collections={collections} onEdit={(p) => { setSelectedPrompt(null); handleEditClick(p); }} onDelete={(id) => { setSelectedPrompt(null); setModalOpen(false); handleDeletePrompt(id); }} /> : view === 'prompts' ? <PromptForm onSave={handleRefresh} collections={collections} initialData={editingPrompt} /> : <CollectionForm onSave={handleRefresh} initialData={editingCollection} />}
       </Modal>
+
+      <ConfirmDialog isOpen={confirmDelete.isOpen} loading={isDeleting} onClose={() => setConfirmDelete({ ...confirmDelete, isOpen: false })} onConfirm={executeDelete} title={`Delete ${confirmDelete.type}`} message={confirmDelete.type === 'collection' ? `Delete "${confirmDelete.title}" and its prompts?` : `Delete "${confirmDelete.title}"?`} />
     </Layout>
   );
 }
