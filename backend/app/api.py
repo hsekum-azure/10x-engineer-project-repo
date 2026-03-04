@@ -30,6 +30,7 @@ app = FastAPI(
 origins = [
     "http://localhost:5173",  # React/Vite default port
     "http://127.0.0.1:5173",
+    "https://one0x-engineer-project-repo-1.onrender.com",
     # Add your production domain here later
 ]
 
