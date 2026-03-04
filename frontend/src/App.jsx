@@ -15,13 +15,14 @@ import { promptApi } from './api/prompts';
 import { collectionApi } from './api/collections';
 
 function App() {
+  // --- State Management ---
   const [view, setView] = useState('prompts'); 
   const [prompts, setPrompts] = useState([]);
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isModalOpen, setModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(""); // This state drives the highlight
+  const [searchQuery, setSearchQuery] = useState(""); 
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [editingCollection, setEditingCollection] = useState(null);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
@@ -34,16 +35,21 @@ function App() {
   });
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // --- Derived Data ---
   const allAvailableTags = useMemo(() => {
     const tags = new Set();
     prompts.forEach(p => p.tags?.forEach(t => tags.add(t)));
     return Array.from(tags).sort();
   }, [prompts]);
 
-  useEffect(() => { loadAllData(); }, []);
+  // --- Data Loading ---
+  useEffect(() => { 
+    loadAllData(); 
+  }, []);
 
   const loadAllData = async () => {
     setLoading(true);
+    setError(null); // Clear previous errors before retrying
     try {
       const [pData, cData] = await Promise.all([
         promptApi.getPrompts(),
@@ -51,8 +57,8 @@ function App() {
       ]);
       setPrompts(pData.prompts);
       setCollections(cData.collections);
-      setError(null);
     } catch (err) {
+      // Catch "Connection failed" or "Network Error" from client.js
       setError(err);
     } finally {
       setLoading(false);
@@ -77,9 +83,10 @@ function App() {
       });
   };
 
+  // --- Handlers ---
   const handleSearch = (query) => {
-    setSearchQuery(query); // Update state for the UI
-    fetchFilteredPrompts(query, activeCollection, activeTags); // Filter data
+    setSearchQuery(query);
+    fetchFilteredPrompts(query, activeCollection, activeTags);
   };
 
   const handleCollectionFilter = (id) => {
@@ -131,9 +138,12 @@ function App() {
   const handleCloseModal = () => { setModalOpen(false); setEditingPrompt(null); setEditingCollection(null); setSelectedPrompt(null); };
   const handleRefresh = () => { handleCloseModal(); loadAllData(); };
 
+  // --- Content Renderer ---
   const renderContent = () => {
     if (loading) return <LoadingSpinner />;
-    if (error) return <ErrorMessage message={error} />;
+    
+    // User-friendly error display with Retry capability
+    if (error) return <ErrorMessage message={error} onRetry={loadAllData} />;
 
     if (view === 'prompts') {
       if (prompts.length > 0) {
@@ -158,7 +168,6 @@ function App() {
     }
 
     if (view === 'collections') {
-      // 1. Calculate how many prompts are in each collection
       const promptCounts = prompts.reduce((acc, prompt) => {
         if (prompt.collection_id) {
           acc[prompt.collection_id] = (acc[prompt.collection_id] || 0) + 1;
@@ -170,7 +179,7 @@ function App() {
         return (
           <CollectionList 
             collections={collections} 
-            promptCounts={promptCounts} // 2. Pass counts to the list
+            promptCounts={promptCounts} 
             onDelete={handleDeleteCollection} 
             onEdit={handleEditCollectionClick} 
           />
@@ -209,7 +218,11 @@ function App() {
           <div className="flex flex-col lg:flex-row lg:items-center gap-6">
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">Collection</span>
-              <select value={activeCollection} onChange={(e) => handleCollectionFilter(e.target.value)} className="w-full lg:w-auto bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none">
+              <select 
+                value={activeCollection} 
+                onChange={(e) => handleCollectionFilter(e.target.value)} 
+                className="w-full lg:w-auto bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
                 <option value="">All Collections</option>
                 {collections.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
               </select>
@@ -218,7 +231,13 @@ function App() {
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tags</span>
               <div className="flex flex-nowrap lg:flex-wrap gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
                 {allAvailableTags.map(tag => (
-                  <button key={tag} onClick={() => handleTagToggle(tag)} className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${activeTags.includes(tag) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>#{tag}</button>
+                  <button 
+                    key={tag} 
+                    onClick={() => handleTagToggle(tag)} 
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${activeTags.includes(tag) ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    #{tag}
+                  </button>
                 ))}
               </div>
             </div>
@@ -231,11 +250,33 @@ function App() {
 
       <div className="w-full">{renderContent()}</div>
 
-      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedPrompt ? "Details" : editingPrompt ? "Edit Prompt" : editingCollection ? "Edit Collection" : (view === 'prompts' ? "New Prompt" : "New Collection")}>
-        {selectedPrompt ? <PromptDetail prompt={selectedPrompt} collections={collections} onEdit={(p) => { setSelectedPrompt(null); handleEditClick(p); }} onDelete={(id) => { setSelectedPrompt(null); setModalOpen(false); handleDeletePrompt(id); }} /> : view === 'prompts' ? <PromptForm onSave={handleRefresh} collections={collections} initialData={editingPrompt} /> : <CollectionForm onSave={handleRefresh} initialData={editingCollection} />}
+      <Modal 
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal} 
+        title={selectedPrompt ? "Details" : editingPrompt ? "Edit Prompt" : editingCollection ? "Edit Collection" : (view === 'prompts' ? "New Prompt" : "New Collection")}
+      >
+        {selectedPrompt ? (
+          <PromptDetail 
+            prompt={selectedPrompt} 
+            collections={collections} 
+            onEdit={(p) => { setSelectedPrompt(null); handleEditClick(p); }} 
+            onDelete={(id) => { setSelectedPrompt(null); setModalOpen(false); handleDeletePrompt(id); }} 
+          />
+        ) : view === 'prompts' ? (
+          <PromptForm onSave={handleRefresh} collections={collections} initialData={editingPrompt} />
+        ) : (
+          <CollectionForm onSave={handleRefresh} initialData={editingCollection} />
+        )}
       </Modal>
 
-      <ConfirmDialog isOpen={confirmDelete.isOpen} loading={isDeleting} onClose={() => setConfirmDelete({ ...confirmDelete, isOpen: false })} onConfirm={executeDelete} title={`Delete ${confirmDelete.type}`} message={confirmDelete.type === 'collection' ? `Delete "${confirmDelete.title}" and its prompts?` : `Delete "${confirmDelete.title}"?`} />
+      <ConfirmDialog 
+        isOpen={confirmDelete.isOpen} 
+        loading={isDeleting} 
+        onClose={() => setConfirmDelete({ ...confirmDelete, isOpen: false })} 
+        onConfirm={executeDelete} 
+        title={`Delete ${confirmDelete.type}`} 
+        message={confirmDelete.type === 'collection' ? `Delete "${confirmDelete.title}" and its prompts?` : `Delete "${confirmDelete.title}"?`} 
+      />
     </Layout>
   );
 }

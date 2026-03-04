@@ -27,10 +27,16 @@ app = FastAPI(
 #     if not storage.get_all_collections():
 #         seed_initial_data()
 
+origins = [
+    "http://localhost:5173",  # React/Vite default port
+    "http://127.0.0.1:5173",
+    # Add your production domain here later
+]
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
